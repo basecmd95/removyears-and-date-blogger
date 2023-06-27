@@ -1,0 +1,132 @@
+<script type='text/javascript'>
+// basecmd95.blogspot.com
+// Licensed under the MIT License
+
+var urlTotal, nextPageToken, postsDatePrefix = false, accessOnly = false, useApiV3 = false, apiKey = "", blogId = "", postsOrPages = ["pages", "posts"], jsonIndex = 1, secondRequest = true, feedPriority = 0, amp = "&amp;"[0];
+
+function urlVal() {
+  var path = window.location.pathname;
+  var length = path.length;
+
+  if (path.substring(length - 5) === ".html") {
+    return 0;
+  } else if (length > 1) {
+    return 1;
+  } else {
+    return 2;
+  }
+}
+
+function urlMod() {
+  var path = window.location.pathname;
+  if (path.substring(1, 2) === "p") {
+    path = (path.substring(path.indexOf("/", 1) + 1)).substr(0, path.indexOf(".html"));
+    history.replaceState(null, null, "../" + path);
+  } else {
+    path = (path = postsDatePrefix ? path.substring(1) : path.substring(path.indexOf("/", 7) + 1)).substr(0, path.indexOf(".html"));
+    history.replaceState(null, null, "../../" + path);
+  }
+}
+
+function urlSearch(keyword, urls) {
+  var searchUrl = keyword + ".html";
+  urls.forEach(function (url) {
+    if (url.search(searchUrl) !== -1) {
+      window.location = url;
+    }
+  });
+}
+
+function urlManager() {
+  var urlType = urlVal();
+  if (urlType === 0) {
+    if (!accessOnly) {
+      urlMod();
+    }
+  } else if (urlType === 1) {
+    getJSON(postsOrPages[feedPriority], 1);
+  } else if (urlType === 2) {
+    if (!accessOnly) {
+      history.replaceState(null, null, "/");
+    }
+  }
+}
+
+function getJSON(type, index) {
+  var script = document.createElement("script");
+  var apiUrl;
+
+  if (useApiV3) {
+    apiUrl = "https://www.googleapis.com/blogger/v3/blogs/" + blogId + "/" + type + "?key=" + apiKey + "#maxResults=500#fields=nextPageToken%2Citems(url)#callback=bloggerJSON";
+    if (nextPageToken) {
+      apiUrl += "#pageToken=" + nextPageToken;
+    }
+    nextPageToken = undefined;
+  } else {
+    apiUrl = window.location.protocol + "//" + window.location.hostname + "/feeds/" + type + "/default?start-index=" + index + "#max-results=150#orderby=published#alt=json-in-script#callback=bloggerJSON";
+  }
+
+  apiUrl = apiUrl.replace(/#/g, amp);
+  script.type = "text/javascript";
+  script.src = apiUrl;
+  document.getElementsByTagName("head")[0].appendChild(script);
+}
+
+function bloggerJSON(response) {
+  var urls = [];
+
+  if (useApiV3 || typeof urlTotal === "undefined") {
+    urlTotal = parseInt(response.feed.openSearch$totalResults.$t);
+
+    try {
+      response.items.forEach(function (item) {
+        urls.push(item.url);
+      });
+    } catch (error) {}
+
+    nextPageToken = response.nextPageToken;
+  } else {
+    try {
+      response.feed.entry.forEach(function (entry) {
+        entry.link.forEach(function (link) {
+          if (link.rel === "alternate") {
+            urls.push(link.href);
+          }
+        });
+      });
+    } catch (error) {}
+  }
+
+  urlSearch(window.location.pathname, urls);
+
+  if (urlTotal > 150) {
+    jsonIndex += 150;
+    urlTotal -= 150;
+    getJSON(postsOrPages[feedPriority], jsonIndex);
+  } else if (nextPageToken) {
+    getJSON(postsOrPages[feedPriority]);
+  } else if (secondRequest) {
+    nextPageToken = undefined;
+    urlTotal = undefined;
+    jsonIndex = 1;
+    secondRequest = false;
+
+    if (feedPriority === 0) {
+      feedPriority = 1;
+      getJSON("posts", 1);
+    } else if (feedPriority === 1) {
+      feedPriority = 0;
+      getJSON("pages", 1);
+    }
+  }
+}
+
+function bloggerJS(priority) {
+  if (priority) {
+    feedPriority = priority;
+  }
+  urlManager();
+}
+
+bloggerJS();
+</script>
